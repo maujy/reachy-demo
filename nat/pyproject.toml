@@ -1,0 +1,20 @@
+[project]
+name = "ces-tutorial"
+version = "0.1.0"
+description = "Build an agent with Nemotron, Reachy, and NeMo Agent Toolkit"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "nvidia-nat[langchain]>=1.3.1",
+]
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools >= 64", "setuptools-scm>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ces_tutorial"]
+
+[project.entry-points."nat.components"]
+ces_tutorial = "ces_tutorial.register"
