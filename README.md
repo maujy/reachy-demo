@@ -29,7 +29,7 @@ The system consists of three main components running in parallel:
 ### 1. Clone and Navigate to Repository
 
 ```bash
-cd /path/to/ces-tutorial
+cd /path/to/reachy-personal-assistant
 ```
 
 ### 2. Create Environment File
@@ -125,7 +125,7 @@ Check out `ces_tutorial.mp4` to see the system in action!
 ## Project Structure
 
 ```
-ces-tutorial/
+reachy-personal-assistant/
 ├── bot/                    # Robot control and vision/speech processing
 │   ├── main.py            # Main bot orchestration
 │   ├── nat_vision_llm.py  # Vision and LLM integration
