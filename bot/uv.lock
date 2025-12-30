@@ -299,7 +299,7 @@ requires-dist = [
     { name = "aiortc", specifier = ">=1.14.0" },
     { name = "onnxruntime", specifier = ">=1.23.2" },
     { name = "pipecat-ai", extras = ["daily", "local-smart-turn-v3"], specifier = ">=0.0.98" },
-    { name = "pipecat-ai-small-webrtc-prebuilt", specifier = ">=2.0.0" },
+    { name = "pipecat-ai-small-webrtc-prebuilt", specifier = ">=2.0.4" },
     { name = "reachy-mini", extras = ["mujoco"], specifier = ">=1.2.4" },
     { name = "reachy-mini-dances-library", specifier = ">=0.2.1" },
     { name = "transformers", specifier = ">=4.57.3" },
@@ -1593,12 +1593,15 @@ local-smart-turn-v3 = [
 
 [[package]]
 name = "pipecat-ai-small-webrtc-prebuilt"
-version = "2.0.0"
+version = "2.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi", extra = ["all"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/14/8484ab387169779d1a6aaba90e133a067f0810ba5c53c9d0e2b6707857a9/pipecat_ai_small_webrtc_prebuilt-2.0.0.tar.gz", hash = "sha256:ad43b0ff1d4afaeae25241b3a8c2c283896f879d1e5d585ed8ed159db123178d", size = 588667, upload-time = "2025-12-01T00:27:43.27Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/88/57b26547ec45623718f1d5beb9e004dba55b7ab548a3b48748466e3e1769/pipecat_ai_small_webrtc_prebuilt-2.0.4.tar.gz", hash = "sha256:3c3447679007ea937c760223bb66579f2605cf94628a68c9da1d66787a96caad", size = 584994, upload-time = "2025-12-30T19:14:52.655Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/6e/332b78d1c7888ff426bd528b150aad0da05024f4f91e56502c359726c07b/pipecat_ai_small_webrtc_prebuilt-2.0.4-py3-none-any.whl", hash = "sha256:054b3cee843fe69191859dbb0693560d9ca08f7d57a9ff0457d0bc741f36f4df", size = 585606, upload-time = "2025-12-30T19:14:50.595Z" },
+]
 
 [[package]]
 name = "prompt-toolkit"
