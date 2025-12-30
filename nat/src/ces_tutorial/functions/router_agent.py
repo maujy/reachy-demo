@@ -33,7 +33,7 @@ class RouterAgentConfig(FunctionBaseConfig, name="ces_tutorial_router_agent"):
 async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
     """Route between chitchat LLM, image LLM, and agent based on user intent."""
     
-    from nat.data_models.api_server import ChatResponse, ChatResponseChoice, Usage, ChoiceMessage, Message
+    from nat.data_models.api_server import ChatResponse, ChatResponseChoice, Usage, ChoiceMessage
     from ces_tutorial.openai_chat_request import OpenAIChatRequest as ChatRequest
     from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
     import time
@@ -83,7 +83,7 @@ async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
         return langchain_messages
     
     def _convert_to_nat_messages(messages, redact_images=True):
-        """Convert OpenAI format messages to NAT messages."""
+        """Convert OpenAI format messages to dictionaries for OpenAIChatRequest."""
         nat_messages = []
         for msg in messages:
             msg_dict = msg.model_dump() if hasattr(msg, 'model_dump') else dict(msg)
@@ -94,7 +94,8 @@ async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
             if redact_images:
                 content = _redact_images_from_content(content)
             
-            nat_messages.append(Message(role=role, content=content))
+            # Return plain dictionaries, not Message objects
+            nat_messages.append({"role": role, "content": content})
         
         return nat_messages
     
@@ -220,18 +221,22 @@ async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
                 logger.warn(f"RouterAgent: Routing to agent function for '{route}' intent")
                 
                 try:
-                    # Convert messages to NAT format and redact images
+                    # Convert messages to dict format
+                    # NOTE: Set redact_images=False if you want the agent to see images
+                    # (assuming you have a multimodal LLM backing the agent).
                     nat_messages = _convert_to_nat_messages(chat_request.messages, redact_images=True)
-                    logger.warn(f"RouterAgent: Converted {len(nat_messages)} messages for agent (images redacted)")
+                    logger.warn(f"RouterAgent: Converted {len(nat_messages)} messages for agent")
                     
-                    # Create a new ChatRequest with redacted messages
-                    agent_request = ChatRequest(
-                        messages=nat_messages,
-                        model=chat_request.model if hasattr(chat_request, 'model') else None
-                    )
+                    # Manually construct the input dictionary for the agent.
+                    # We pass a dict that matches the standard ChatRequestOrMessage structure.
+                    # The converter in register.py will handle turning this into OpenAIChatRequest.
+                    agent_input = {
+                        "messages": nat_messages,
+                        "model": chat_request.model if hasattr(chat_request, 'model') else "nemotron"
+                    }
                     
-                    # Call the agent function
-                    agent_response = await agent_function.ainvoke(agent_request)
+                    # Call the agent function with the dict
+                    agent_response = await agent_function.ainvoke(agent_input)
                     logger.warn(f"RouterAgent: Agent response received: {type(agent_response)}")
                     return agent_response
                     
