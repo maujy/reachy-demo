@@ -21,15 +21,25 @@ The system consists of three main components running in parallel:
 
 - Python 3.10+
 - [uv](https://github.com/astral-sh/uv) package manager
-- NVIDIA API Key (for Nemotron models)
 - ElevenLabs API Key (for text-to-speech)
+- Local NIM containers (see below) OR NVIDIA API Key for cloud inference
+
+### Local NIM Setup (Optional)
+
+The default configuration expects local NIM containers on:
+- **Port 8000**: Vision model (nemotron-nano-12b-v2-vl)
+- **Port 8080**: Routing model (phi-3-mini)
+- **Port 8081**: Agent/Chitchat model (nemotron-3-nano)
+
+To use cloud NIM instead, update `nat/src/ces_tutorial/config.yml` to remove `base_url` entries and use full model names (e.g., `nvidia/nemotron-3-nano-30b-a3b`).
 
 ## Setup Instructions
 
 ### 1. Clone and Navigate to Repository
 
 ```bash
-cd /path/to/reachy-personal-assistant
+git clone https://github.com/maujy/reachy-demo.git
+cd reachy-demo
 ```
 
 ### 2. Create Environment File
@@ -125,23 +135,25 @@ Check out `ces_tutorial.mp4` to see the system in action!
 ## Project Structure
 
 ```
-reachy-personal-assistant/
+reachy-demo/
 ├── bot/                    # Robot control and vision/speech processing
 │   ├── main.py            # Main bot orchestration
-│   ├── nat_vision_llm.py  # Vision and LLM integration
+│   ├── nat_vision_llm.py  # Vision and LLM integration with smart classification
 │   └── services/          # Robot services (moves, speech, etc.)
 ├── nat/                    # NeMo Agent Toolkit configuration
 │   └── src/ces_tutorial/
-│       ├── config.yml     # Agent configuration
+│       ├── config.yml     # Agent and local NIM endpoint configuration
 │       └── functions/     # Router and agent implementations
+├── CLAUDE.md              # Claude Code guidance
 └── .env                   # API keys (create this file)
 ```
 
 ## Troubleshooting
 
-- **Port conflicts**: Ensure port 8001 is available for the NeMo Agent service
+- **Port conflicts**: Ensure ports 8000, 8001, 8080, 8081 are available
 - **API key errors**: Verify your `.env` file is properly formatted and contains valid keys
 - **Robot connection issues**: Check that the Reachy daemon started successfully before launching the bot service
+- **NIM connection errors**: Ensure local NIM containers are running on the expected ports, or switch to cloud NIM in config.yml
 
 ## Resources
 
