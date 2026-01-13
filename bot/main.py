@@ -190,10 +190,15 @@ class EarlyFeedbackProcessor(FrameProcessor):
         super().__init__()
         self._last_feedback_time = 0
         self._task = None
+        self._rtvi = None
 
     def set_task(self, task):
         """Set the pipeline task for direct frame queuing."""
         self._task = task
+
+    def set_rtvi(self, rtvi):
+        """Set RTVI processor for text display."""
+        self._rtvi = rtvi
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -208,6 +213,16 @@ class EarlyFeedbackProcessor(FrameProcessor):
                 if current_time - self._last_feedback_time > self.COOLDOWN_SECS:
                     self._last_feedback_time = current_time
                     logger.info(f"EarlyFeedback: Web search likely for '{text[:30]}...', sending acknowledgment")
+                    # Send RTVI messages for text display
+                    if self._rtvi:
+                        try:
+                            await self._rtvi.push_transport_message(RTVIBotLLMStartedMessage())
+                            await self._rtvi.push_transport_message(RTVIBotLLMTextMessage(
+                                data=RTVITextMessageData(text=self.FEEDBACK_MESSAGE)
+                            ))
+                            await self._rtvi.push_transport_message(RTVIBotLLMStoppedMessage())
+                        except Exception as e:
+                            logger.warning(f"EarlyFeedback: RTVI text failed: {e}")
                     # Queue TTS frame directly to task (bypasses pipeline filters)
                     if self._task:
                         await self._task.queue_frames([TTSSpeakFrame(text=self.FEEDBACK_MESSAGE)])
@@ -381,8 +396,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
         )
 
-        # Set task reference for early feedback to queue TTS directly
+        # Set task and rtvi references for early feedback
         early_feedback.set_task(task)
+        early_feedback.set_rtvi(rtvi)
 
         @transcript.event_handler("on_transcript_update")
         async def handle_transcript_update(processor, frame):
