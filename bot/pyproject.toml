@@ -12,4 +12,5 @@ dependencies = [
     "reachy-mini[mujoco]>=1.2.4",
     "reachy-mini-dances-library>=0.2.1",
     "transformers>=4.57.3",
+    "opencc-python-reimplemented>=0.1.7",
 ]

@@ -70,6 +70,9 @@ class NATVisionLLMService(NvidiaLLMService):
     This saves ~16K tokens per turn for non-visual questions.
     """
 
+    # vLLM model name for vision requests
+    VISION_MODEL = "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD"
+
     def __init__(self, *args, user_id: Optional[str] = None, max_image_dimension: int = 256,
                  image_quality: int = 40, classifier_url: str = "http://localhost:8000/v1",
                  vision_url: str = "http://localhost:8000/v1", **kwargs):
@@ -86,7 +89,6 @@ class NATVisionLLMService(NvidiaLLMService):
         self._image_quality = image_quality
         self._classifier_url = classifier_url
         self._vision_url = vision_url  # Direct vLLM URL for vision requests
-        self._original_base_url = None  # Store original base_url
         self._pending_messages_frame: Optional[Frame] = None
 
     def set_user_id(self, user_id: str):
@@ -296,10 +298,20 @@ class NATVisionLLMService(NvidiaLLMService):
                     logger.info(f"NATVisionLLMService: No vision needed for '{user_message[:30]}...', skipping image")
                     self._current_turn_has_image = True  # Mark as processed (no image needed)
 
-            # Check if context has image - if so, use direct vLLM instead of NAT
+            # Check if context has image - if so, use vLLM instead of NAT
             if self._context_has_image(frame):
-                logger.info(f"NATVisionLLMService: Context has image, sending directly to vLLM at {self._vision_url}")
-                await self._process_vision_request_direct(frame, direction)
+                logger.info(f"NATVisionLLMService: Context has image, routing to vLLM at {self._vision_url}")
+                # Temporarily swap base_url and model to use vLLM for vision requests
+                original_base_url = self._client.base_url
+                original_model = self.model_name  # Use property, not _model_name
+                self._client.base_url = self._vision_url
+                self.set_model_name(self.VISION_MODEL)
+                try:
+                    await super().process_frame(frame, direction)
+                finally:
+                    # Restore original base_url and model
+                    self._client.base_url = original_base_url
+                    self.set_model_name(original_model)
                 return
 
         await super().process_frame(frame, direction)

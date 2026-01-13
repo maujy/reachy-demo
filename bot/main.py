@@ -14,13 +14,27 @@ from loguru import logger
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import LLMRunFrame, TTSSpeakFrame
+from pipecat.frames.frames import (
+    LLMRunFrame,
+    TTSSpeakFrame,
+    TextFrame,
+    LLMTextFrame,
+    LLMFullResponseStartFrame,
+    LLMFullResponseEndFrame,
+)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
-from pipecat.processors.frameworks.rtvi import RTVIProcessor, RTVIObserver
+from pipecat.processors.frameworks.rtvi import (
+    RTVIProcessor,
+    RTVIObserver,
+    RTVIBotLLMStartedMessage,
+    RTVIBotLLMStoppedMessage,
+    RTVIBotLLMTextMessage,
+    RTVITextMessageData,
+)
 from pipecat.processors.transcript_processor import TranscriptProcessor
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import (
@@ -28,7 +42,7 @@ from pipecat.runner.utils import (
     get_transport_client_id,
     maybe_capture_participant_camera,
 )
-from pipecat.services.elevenlabs.stt import ElevenLabsSTTService
+# ElevenLabsSTTService imported via ConvertingElevenLabsSTTService wrapper
 from pipecat.services.elevenlabs.tts import ElevenLabsHttpTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -41,6 +55,7 @@ from PIL import Image, ImageDraw, ImageFont
 from nat_vision_llm import NATVisionLLMService
 from services.reachy_service import ReachyService
 from services.processor import ReachyWobblerProcessor
+from services.chinese_converter import SimplifiedToTraditionalProcessor, ConvertingElevenLabsSTTService
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.frames.frames import OutputImageRawFrame, Frame
 
@@ -76,9 +91,13 @@ class BotVideoSource(FrameProcessor):
         )
 
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+            # Use Noto Sans CJK for Chinese character support
+            font = ImageFont.truetype("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 24)
         except:
-            font = ImageFont.load_default()
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/arphic/uming.ttc", 24)
+            except:
+                font = ImageFont.load_default()
 
         text = "小芝 AI"
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -179,11 +198,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     async with aiohttp.ClientSession() as session:
 
-        stt = ElevenLabsSTTService(
+        stt = ConvertingElevenLabsSTTService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
             aiohttp_session=session,
-            params=ElevenLabsSTTService.InputParams(
-                language=Language.ZH,  # Force Chinese transcription
+            params=ConvertingElevenLabsSTTService.InputParams(
+                language=Language.ZH,  # Chinese (ElevenLabs uses 'zho', converted to Traditional)
             ),
         )
 
@@ -195,6 +214,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         )
 
         llm = NATVisionLLMService(
+            model="nat-router",  # NAT routes internally, this is just a placeholder
             api_key=os.getenv("NVIDIA_API_KEY"),
             base_url="http://localhost:8001/v1",
         )
@@ -213,14 +233,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 當前時間：{current_date} {current_time}
 
 重要規則：
-1. 必須使用繁體中文回答（台灣用語）
+1. 永遠使用繁體中文回答（台灣用語），即使使用者用簡體中文或其他語言提問
 2. 回答要簡潔，適合語音輸出（2-3句話）
 3. 避免使用特殊符號、emoji、項目符號
 4. 保持親切友善的語氣
 5. 你可以看到並描述使用者的攝影機畫面
 
-你支援的語言：繁體中文、English、日本語
-請根據使用者的語言回應。""",
+範例轉換：
+- 简体「请问」→ 繁體「請問」
+- 简体「什么」→ 繁體「什麼」
+- 简体「这样」→ 繁體「這樣」""",
             },
         ]
 
@@ -232,19 +254,25 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         # Create video source for bot avatar
         video_source = BotVideoSource(width=640, height=480, fps=10)
 
+        # Create Simplified → Traditional Chinese converters
+        stt_converter = SimplifiedToTraditionalProcessor()  # For STT output
+        llm_converter = SimplifiedToTraditionalProcessor()  # For LLM output
+
         pipeline = Pipeline(
             [
                 transport.input(),  # Transport user input
                 rtvi,  # RTVI protocol processor
                 stt,  # STT
+                stt_converter,  # Convert user transcriptions to Traditional
                 transcript.user(),  # Capture user transcripts
                 context_aggregator.user(),  # User responses
                 llm,  # LLM
-                tts,  # TTS
+                llm_converter,  # Convert LLM output to Traditional
+                transcript.assistant(),  # Capture assistant transcripts BEFORE TTS
+                tts,  # TTS (consumes TextFrame → AudioFrame)
                 ReachyWobblerProcessor(),
                 video_source,  # Generate placeholder video frames
                 transport.output(),  # Transport bot output
-                transcript.assistant(),  # Capture assistant transcripts
                 context_aggregator.assistant(),  # Assistant spoken responses
             ]
         )
@@ -265,6 +293,25 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             for message in frame.messages:
                 logger.info(f"Transcript [{message.role}]: {message.content}")
 
+        async def send_greeting_with_rtvi(greeting_text: str):
+            """Send greeting with RTVI text display after handshake completes."""
+            # Wait for RTVI handshake to complete
+            await asyncio.sleep(0.5)
+
+            try:
+                # Send RTVI messages for text display using push_transport_message
+                await rtvi.push_transport_message(RTVIBotLLMStartedMessage())
+                await rtvi.push_transport_message(RTVIBotLLMTextMessage(
+                    data=RTVITextMessageData(text=greeting_text)
+                ))
+                await rtvi.push_transport_message(RTVIBotLLMStoppedMessage())
+                logger.info(f"RTVI greeting text sent successfully")
+            except Exception as e:
+                logger.warning(f"RTVI greeting text failed (may not be ready yet): {e}")
+
+            # Always send TTS for audio
+            await task.queue_frames([TTSSpeakFrame(text=greeting_text)])
+
         @transport.event_handler("on_client_connected")
         async def on_client_connected(transport, client):
             logger.info(f"Client connected")
@@ -272,13 +319,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             await maybe_capture_participant_camera(transport, client)
 
             client_id = get_transport_client_id(transport, client)
-            
+
             # Set the user_id for automatic image fetching
             llm.set_user_id(client_id)
 
-            # Send static greeting directly to TTS (bypasses LLM for instant response)
+            # Send greeting with both RTVI text and TTS audio (delayed to wait for handshake)
             greeting = "你好！我是小芝，很高興認識你。有什麼我可以幫助你的嗎？"
-            await task.queue_frames([TTSSpeakFrame(text=greeting)])
+            asyncio.create_task(send_greeting_with_rtvi(greeting))
 
         @transport.event_handler("on_client_disconnected")
         async def on_client_disconnected(transport, client):
