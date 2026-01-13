@@ -78,6 +78,7 @@ cd nat && uv run --env-file ../.env nat serve --config_file src/ces_tutorial/con
 - `services/reachy_service.py`: Singleton robot connection manager
 - `services/moves.py`: MovementManager - 100Hz control loop with command queue
 - `services/wobbler.py`: Audio-driven head animation
+- `services/chinese_converter.py`: Simplified → Traditional Chinese converter using OpenCC (s2twp)
 
 ### NAT Service (`/nat/src/ces_tutorial`)
 - `config.yml`: Model endpoints and workflow configuration
@@ -107,3 +108,9 @@ Required in `.env`:
 ## Language
 
 System prompts and user-facing text use Traditional Chinese (台灣用語).
+
+**Chinese Text Conversion**:
+- ElevenLabs STT outputs Simplified Chinese (API limitation)
+- `ConvertingElevenLabsSTTService` converts STT output to Traditional before RTVI displays it
+- `SimplifiedToTraditionalProcessor` converts LLM output to Traditional
+- Uses OpenCC `s2twp` (Simplified to Traditional with Taiwan phrases)

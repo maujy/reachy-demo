@@ -153,6 +153,8 @@ uv run --env-file ../.env nat serve --config_file src/ces_tutorial/config.yml --
    - `other` → REACT agent with tool calling for complex tasks
 3. **Robot Actions**: Based on the agent's response, the bot executes movements, expressions, or speaks
 
+**Language**: All text (user transcripts and bot responses) is displayed in Traditional Chinese (繁體中文/台灣用語). Speech input is automatically converted from Simplified to Traditional using OpenCC.
+
 ## Demo
 
 Check out `ces_tutorial.mp4` to see the system in action!
