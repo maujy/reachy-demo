@@ -81,9 +81,9 @@ cd nat && uv run --env-file ../.env nat serve --config_file src/ces_tutorial/con
 - `services/chinese_converter.py`: Simplified → Traditional Chinese converter using OpenCC (s2twp)
 
 ### NAT Service (`/nat/src/ces_tutorial`)
-- `config.yml`: Model endpoints and workflow configuration
-- `functions/router.py`: Intent classifier (chit_chat/image_understanding/other)
-- `functions/router_agent.py`: Orchestrates routing to appropriate LLM
+- `config.yml`: Model endpoints, tools, and workflow configuration
+- `functions/router.py`: Reasoning-based intent classifier with tool capability awareness
+- `functions/router_agent.py`: Orchestrates routing to appropriate LLM, strips `<think>` tags
 - `openai_chat_request.py`: Bridges OpenAI API schema with NAT internals
 - `register.py`: Component registration and monkey-patching for REACT agent compatibility
 
@@ -99,11 +99,36 @@ cd nat && uv run --env-file ../.env nat serve --config_file src/ces_tutorial/con
 
 **Graceful Degradation**: Pipeline continues if Reachy daemon unavailable
 
+## Routing and Web Search
+
+The router uses **reasoning-based classification** to determine which route can handle a query:
+
+**Routes:**
+- `other` → REACT agent with tools (web_search, wikipedia_search)
+- `chit_chat` → Direct LLM response (no tools)
+- `image_understanding` → VLM for visual queries
+
+**Reasoning-based routing** (`router.py`):
+- Router prompt explicitly lists tool capabilities per route
+- Weather, news, factual questions → `other` (has web_search)
+- Simple greetings → `chit_chat` (no tools needed)
+
+**Web Search** (Tavily):
+- REACT agent calls `web_search` tool for real-time data
+- Returns results from weather sites, news, etc.
+- Agent synthesizes response from search results
+
+**Think Tag Filtering** (`router_agent.py`):
+- System prompt instructs model to use `<think></think>` tags for reasoning
+- `_strip_think_tags()` removes thinking content before TTS
+- Also filters English reasoning patterns from REACT agent output
+
 ## Environment Variables
 
 Required in `.env`:
-- `ELEVENLABS_API_KEY`
-- `NVIDIA_API_KEY` (if using external endpoints)
+- `ELEVENLABS_API_KEY` - Speech-to-text and text-to-speech
+- `TAVILY_API_KEY` - Web search for real-time data (weather, news, etc.)
+- `NVIDIA_API_KEY` (optional, if using external endpoints)
 
 ## Language
 
