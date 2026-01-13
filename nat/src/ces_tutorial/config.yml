@@ -26,11 +26,11 @@ functions:
       tool_names: [wikipedia_search]
 
 llms:
-   # Routing: Phi-3 Mini on CPU (port 8080) - fast, small model for classification
+   # Routing: Nemotron 3 Nano 30B on GPU (port 8081) - for intent classification
    routing_llm:
       _type: nim
-      base_url: http://localhost:8080/v1
-      model_name: phi-3-mini
+      base_url: http://localhost:8081/v1
+      model_name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       temperature: 0.0
       api_key: "not-needed"
 
@@ -38,7 +38,7 @@ llms:
    agent_llm:
       _type: nim
       base_url: http://localhost:8081/v1
-      model_name: nemotron-3-nano
+      model_name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       temperature: 0.0
       api_key: "not-needed"
 
@@ -46,7 +46,7 @@ llms:
    chitchat_llm:
       _type: nim
       base_url: http://localhost:8081/v1
-      model_name: nemotron-3-nano
+      model_name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       temperature: 0.0
       api_key: "not-needed"
 

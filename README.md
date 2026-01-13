@@ -24,14 +24,23 @@ The system consists of three main components running in parallel:
 - ElevenLabs API Key (for text-to-speech)
 - Local NIM containers (see below) OR NVIDIA API Key for cloud inference
 
-### Local NIM Setup (Optional)
+### Local vLLM Setup (DGX Spark / GB10)
 
-The default configuration expects local NIM containers on:
-- **Port 8000**: Vision model (nemotron-nano-12b-v2-vl)
-- **Port 8080**: Routing model (phi-3-mini)
-- **Port 8081**: Agent/Chitchat model (nemotron-3-nano)
+The default configuration expects local vLLM containers on:
+- **Port 8000**: Vision model (`nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD`)
+- **Port 8081**: Routing/Agent/Chitchat model (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`)
 
-To use cloud NIM instead, update `nat/src/ces_tutorial/config.yml` to remove `base_url` entries and use full model names (e.g., `nvidia/nemotron-3-nano-30b-a3b`).
+Start vLLM containers with the provided script:
+```bash
+./scripts/start-vllm.sh
+```
+
+Stop containers:
+```bash
+./scripts/stop-vllm.sh
+```
+
+To use cloud NIM instead, update `nat/src/ces_tutorial/config.yml` to remove `base_url` entries and use the NVIDIA API.
 
 ## Setup Instructions
 
@@ -73,7 +82,15 @@ uv sync
 
 ## Running the System
 
-You'll need **three terminal windows** running simultaneously.
+You'll need **three terminal windows** running simultaneously, plus vLLM containers.
+
+### First: Start vLLM Containers
+
+```bash
+./scripts/start-vllm.sh
+```
+
+Wait for both models to load (2-5 minutes). The script will show "Ready!" when done.
 
 ### Terminal 1: Start Reachy Mini Daemon
 
@@ -142,18 +159,22 @@ reachy-demo/
 │   └── services/          # Robot services (moves, speech, etc.)
 ├── nat/                    # NeMo Agent Toolkit configuration
 │   └── src/ces_tutorial/
-│       ├── config.yml     # Agent and local NIM endpoint configuration
+│       ├── config.yml     # Agent and local vLLM endpoint configuration
 │       └── functions/     # Router and agent implementations
+├── scripts/               # Utility scripts
+│   ├── start-vllm.sh     # Start vLLM containers
+│   └── stop-vllm.sh      # Stop vLLM containers
 ├── CLAUDE.md              # Claude Code guidance
 └── .env                   # API keys (create this file)
 ```
 
 ## Troubleshooting
 
-- **Port conflicts**: Ensure ports 8000, 8001, 8080, 8081 are available
+- **Port conflicts**: Ensure ports 8000, 8001, 8081 are available
 - **API key errors**: Verify your `.env` file is properly formatted and contains valid keys
 - **Robot connection issues**: Check that the Reachy daemon started successfully before launching the bot service
-- **NIM connection errors**: Ensure local NIM containers are running on the expected ports, or switch to cloud NIM in config.yml
+- **vLLM connection errors**: Run `./scripts/start-vllm.sh` and wait for models to load. Check logs with `docker logs vllm-reachy` or `docker logs vllm-agent`
+- **Model loading fails**: On GB10, the agent model requires `--enforce-eager` flag (included in script) to avoid CUDA graph compilation issues
 
 ## Resources
 

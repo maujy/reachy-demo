@@ -40,6 +40,16 @@ cd bot && uv venv && uv sync
 cd ../nat && uv venv && uv sync
 ```
 
+### Start vLLM Containers (DGX Spark / GB10)
+```bash
+./scripts/start-vllm.sh   # Start containers, wait for models to load
+./scripts/stop-vllm.sh    # Stop containers
+```
+
+Models served:
+- Port 8000: `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD` (vision)
+- Port 8081: `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (routing/agent/chitchat)
+
 ### Running (three terminals)
 ```bash
 # Terminal 1: Reachy daemon (simulator)
