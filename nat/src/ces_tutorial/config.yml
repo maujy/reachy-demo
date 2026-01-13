@@ -37,8 +37,9 @@ llms:
 
    # Agent: Nemotron 3 Nano 30B via llama.cpp (port 8081) - for complex reasoning/tools
    # Note: Using llama.cpp with GGUF for GB10 compatibility (vLLM MoE kernels don't compile)
+   # Using 'openai' type for standard OpenAI-compatible API (not 'nim' which expects NVIDIA-specific format)
    agent_llm:
-      _type: nim
+      _type: openai
       base_url: http://localhost:8081/v1
       model_name: nemotron
       temperature: 0.0
@@ -46,7 +47,7 @@ llms:
 
    # Chitchat: Nemotron 3 Nano 30B via llama.cpp (port 8081) - for casual conversation
    chitchat_llm:
-      _type: nim
+      _type: openai
       base_url: http://localhost:8081/v1
       model_name: nemotron
       temperature: 0.0

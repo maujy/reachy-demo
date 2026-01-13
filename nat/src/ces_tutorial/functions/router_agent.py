@@ -99,8 +99,20 @@ async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
         
         return nat_messages
     
+    def _strip_think_tags(content):
+        """Strip <think>...</think> tags from content (llama.cpp reasoning output)."""
+        import re
+        if not content or not isinstance(content, str):
+            return content
+        # Remove <think>...</think> blocks (including multiline)
+        cleaned = re.sub(r'<think>.*?</think>\s*', '', content, flags=re.DOTALL)
+        # Also handle case where </think> appears without opening tag (partial output)
+        cleaned = re.sub(r'^.*?</think>\s*', '', cleaned, flags=re.DOTALL)
+        return cleaned.strip()
+
     def _create_chat_response(content, model_name):
         """Create a ChatResponse from LLM content."""
+        content = _strip_think_tags(content)
         return ChatResponse(
             id="chatcmpl-" + str(int(time.time())),
             object="chat.completion",
@@ -238,6 +250,13 @@ async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
                     # Call the agent function with the dict
                     agent_response = await agent_function.ainvoke(agent_input)
                     logger.warn(f"RouterAgent: Agent response received: {type(agent_response)}")
+
+                    # Strip think tags from agent response
+                    if hasattr(agent_response, 'choices') and agent_response.choices:
+                        for choice in agent_response.choices:
+                            if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                                choice.message.content = _strip_think_tags(choice.message.content)
+
                     return agent_response
                     
                 except Exception as e:
