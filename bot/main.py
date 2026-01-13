@@ -238,11 +238,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 3. 避免使用特殊符號、emoji、項目符號
 4. 保持親切友善的語氣
 5. 你可以看到並描述使用者的攝影機畫面
-
-範例轉換：
-- 简体「请问」→ 繁體「請問」
-- 简体「什么」→ 繁體「什麼」
-- 简体「这样」→ 繁體「這樣」""",
+6. 如果需要思考，將思考過程放在<think></think>標籤內，標籤外只寫最終回答""",
             },
         ]
 

@@ -39,13 +39,30 @@ You are provided with route description within <routes></routes> XML tags:
 """
 
 FORMAT_PROMPT = """
-Your task is to decide which route is best suit with user intent on the conversation in <conversation></conversation> XML tags.  Follow the instruction:
-1. If the latest intent from user is irrelevant or user intent is full filled, response with other route {"route": "other"}.
-2. You must analyze the route descriptions and find the best match route for user latest intent. 
-3. You only response the name of the route that best matches the user's request, use the exact name in the <routes></routes>.
+Your task is to decide which route is best suited for the user's latest message.
 
-Based on your analysis, provide your response in the following JSON formats if you decide to match any route:
-{"route": "route_name"} 
+CRITICAL - Route Capabilities:
+- "other" route: Has web_search tool for REAL-TIME information (weather/天氣, news, stock prices, current events, facts)
+- "chit_chat" route: NO tools - ONLY for greetings and casual chat, CANNOT answer factual questions
+- "image_understanding" route: Can see and describe what user looks like or is holding
+
+REASONING (think step-by-step):
+1. Does the question need CURRENT/REAL-TIME data (weather, news, prices, scores, facts)?
+   → YES = MUST use "other" (only route with web_search)
+2. Does it ask about user's appearance or surroundings?
+   → YES = use "image_understanding"
+3. Is it ONLY a greeting (你好/hi) or thanks (謝謝) with NO factual question?
+   → YES = use "chit_chat"
+
+Examples:
+- "天氣如何" → other (needs web_search for weather)
+- "明天會冷嗎" → other (needs weather forecast)
+- "今天新聞" → other (needs web_search)
+- "你好" → chit_chat (just greeting)
+- "謝謝" → chit_chat (just thanks)
+- "我穿什麼" → image_understanding (needs to see user)
+
+Respond ONLY with JSON: {"route": "route_name"}
 """
 
 # Custom JSON encoder for Pydantic models and non-serializable objects

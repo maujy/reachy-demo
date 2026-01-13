@@ -100,14 +100,43 @@ async def router_agent_fn(config: RouterAgentConfig, builder: Builder):
         return nat_messages
     
     def _strip_think_tags(content):
-        """Strip <think>...</think> tags from content (llama.cpp reasoning output)."""
+        """Strip reasoning content from LLM output.
+
+        Handles:
+        1. <think>...</think> tags (llama.cpp format)
+        2. English reasoning patterns from REACT agent
+        3. Extracts final Chinese answer from mixed content
+        """
         import re
         if not content or not isinstance(content, str):
             return content
+
         # Remove <think>...</think> blocks (including multiline)
         cleaned = re.sub(r'<think>.*?</think>\s*', '', content, flags=re.DOTALL)
         # Also handle case where </think> appears without opening tag (partial output)
         cleaned = re.sub(r'^.*?</think>\s*', '', cleaned, flags=re.DOTALL)
+
+        # Remove English reasoning patterns from REACT agent output
+        reasoning_patterns = [
+            r'Ensure no extra symbols\.?\s*',
+            r'Provide concise answer.*?sentences\.?\s*',
+            r"Let's craft:?\s*",
+            r'No special symbols\.?\s*',
+            r'Use Traditional Chinese.*?\s*',
+            r'That\'s \d+-\d+ sentences\.?\s*',
+        ]
+        for pattern in reasoning_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+
+        # If content has quoted Chinese answer, extract it
+        # Pattern: "actual answer" or 「actual answer」
+        quote_match = re.search(r'[「"]([\u4e00-\u9fff].*?)[」"]', cleaned)
+        if quote_match and len(quote_match.group(1)) > 10:
+            cleaned = quote_match.group(1)
+
+        # Clean up extra whitespace
+        cleaned = re.sub(r'\n\s*\n', '\n', cleaned)
+
         return cleaned.strip()
 
     def _create_chat_response(content, model_name):

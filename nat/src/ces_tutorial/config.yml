@@ -6,14 +6,18 @@ functions:
    wikipedia_search:
       _type: wiki_search
       max_results: 2
-      
+
+   web_search:
+      _type: tavily_internet_search
+      max_results: 3
+
    router:
       _type: router
       route_config:
         - name: other
-          description: Any question that requires careful thought, outside information, image understanding, or tool calling to take actions.
+          description: Any question that requires outside information, web search, current events, weather, news, facts, or tool calling to take actions. Examples include weather forecasts, current news, stock prices, sports scores, or factual questions.
         - name: chit_chat
-          description: Any simple chit chat, small talk, or casual conversation.
+          description: Simple greetings, personal opinions, emotional support, or casual conversation that does not require factual information or web search.
         - name: image_understanding
           description: A question that requires the assistant to see the user eg a question about their appearance, environment, scene or surroundings. Examples what am I holding, what am I wearing, what do I look like, what is in my surroundings, what does it say on the whiteboard. Questions about attire eg what color is my shirt/hat/jacket/etc
       llm_name: routing_llm
@@ -23,7 +27,7 @@ functions:
       llm_name: agent_llm
       verbose: true
       parse_agent_response_max_retries: 3
-      tool_names: [wikipedia_search]
+      tool_names: [wikipedia_search, web_search]
 
 llms:
    # Routing: VLM on GPU (port 8000) - reusing VLM for intent classification
