@@ -172,6 +172,11 @@ transport_params = {
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     logger.info(f"Starting bot")
 
+    # Connect to Reachy robot early so camera is available
+    reachy = ReachyService.get_instance()
+    if not reachy.connected:
+        reachy.connect()
+
     async with aiohttp.ClientSession() as session:
 
         stt = ElevenLabsSTTService(
