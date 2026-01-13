@@ -140,12 +140,31 @@ def format_prompt(conversation: List[Dict[str, Any]], route_config: List[Dict[st
 @lru_cache(maxsize=128)
 def _parse_route_response(response: str) -> str:
     """Parse and cache route responses to avoid repeated JSON parsing."""
+    import re
+
+    # Strip markdown code blocks if present (e.g., ```json ... ```)
+    cleaned = response.strip()
+    if cleaned.startswith("```"):
+        # Remove opening ```json or ``` and closing ```
+        cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        cleaned = cleaned.strip()
+
     try:
-        return json.loads(response)["route"]
+        return json.loads(cleaned)["route"]
     except json.JSONDecodeError:
         # Handle single quote format
         import ast
-        return ast.literal_eval(response)["route"]
+        try:
+            return ast.literal_eval(cleaned)["route"]
+        except (SyntaxError, ValueError):
+            # Last resort: try to extract route with regex
+            match = re.search(r'"route"\s*:\s*"([^"]+)"', response)
+            if match:
+                return match.group(1)
+            # Default to "other" if parsing fails
+            logger.warning(f"Failed to parse route response: {response[:100]}, defaulting to 'other'")
+            return "other"
 
 
 
@@ -230,8 +249,14 @@ async def router_fn(config: RouterConfig, builder: Builder):
             else:
                 logger.info(f"Router: Last message content is string, length: {len(str(content))}")
 
-            # Assign a list containing only the last message's dictionary
-            messages_dict = [last_msg_dict]
+            # Consider last 3 messages for better context (handles follow-up questions)
+            recent_messages = messages[-3:] if len(messages) >= 3 else messages
+            messages_dict = []
+            for msg in recent_messages:
+                msg_dict = msg.model_dump() if hasattr(msg, 'model_dump') else dict(msg)
+                msg_dict = materialize_iterator(msg_dict)
+                messages_dict.append(msg_dict)
+            logger.info(f"Router: Using {len(messages_dict)} recent messages for context")
             
         else:
             # Handle the case where the list of messages is empty

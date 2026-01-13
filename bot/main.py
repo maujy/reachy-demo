@@ -50,6 +50,7 @@ from pipecat.transports.daily.transport import DailyParams
 import aiohttp
 import asyncio
 import numpy as np
+import time
 from PIL import Image, ImageDraw, ImageFont
 
 from nat_vision_llm import NATVisionLLMService
@@ -57,7 +58,7 @@ from services.reachy_service import ReachyService
 from services.processor import ReachyWobblerProcessor
 from services.chinese_converter import SimplifiedToTraditionalProcessor, ConvertingElevenLabsSTTService
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
-from pipecat.frames.frames import OutputImageRawFrame, Frame
+from pipecat.frames.frames import OutputImageRawFrame, Frame, TranscriptionFrame, TTSSpeakFrame, LLMMessagesFrame, LLMContextFrame
 
 
 load_dotenv(override=True)
@@ -166,6 +167,95 @@ class BotVideoSource(FrameProcessor):
                 pass
 
 
+class EarlyFeedbackProcessor(FrameProcessor):
+    """Send immediate audio acknowledgment for queries likely needing web search.
+
+    This reduces user interruption during long REACT agent queries by providing
+    audio feedback within ~1 second, setting user expectations to wait.
+    """
+
+    # Keywords strongly indicating web search is needed
+    WEB_SEARCH_TRIGGERS = [
+        '天氣', '氣溫', '溫度', '幾度', '下雨', '會冷', '會熱',  # Weather
+        '新聞', '頭條', '消息',                                   # News
+        '股價', '股票', '行情',                                   # Stocks
+        '比分', '比賽',                                           # Sports
+        '行程', '旅遊', '景點', '推薦',                           # Travel
+    ]
+
+    FEEDBACK_MESSAGE = "好的，讓我查一下。"
+    COOLDOWN_SECS = 10.0  # Avoid repeated feedback
+
+    def __init__(self):
+        super().__init__()
+        self._last_feedback_time = 0
+        self._task = None
+
+    def set_task(self, task):
+        """Set the pipeline task for direct frame queuing."""
+        self._task = task
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        # Check for final transcription frames
+        if isinstance(frame, TranscriptionFrame):
+            text = getattr(frame, 'text', '')
+            current_time = time.time()
+
+            # Check for web search trigger keywords
+            if any(trigger in text for trigger in self.WEB_SEARCH_TRIGGERS):
+                if current_time - self._last_feedback_time > self.COOLDOWN_SECS:
+                    self._last_feedback_time = current_time
+                    logger.info(f"EarlyFeedback: Web search likely for '{text[:30]}...', sending acknowledgment")
+                    # Queue TTS frame directly to task (bypasses pipeline filters)
+                    if self._task:
+                        await self._task.queue_frames([TTSSpeakFrame(text=self.FEEDBACK_MESSAGE)])
+
+        # Always pass through original frame
+        await self.push_frame(frame, direction)
+
+
+class ContextLimitProcessor(FrameProcessor):
+    """Limit conversation context to prevent hallucination from long history.
+
+    When context gets too long, LLMs can get confused and produce garbled output.
+    This processor trims old messages, keeping only recent turns plus system message.
+    """
+
+    def __init__(self, context, max_turns: int = 4):
+        super().__init__()
+        self._context = context
+        self._max_turns = max_turns
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        # Check and trim context when LLM is about to be called
+        # Trigger on LLMMessagesFrame or LLMContextFrame
+        if isinstance(frame, (LLMMessagesFrame, LLMContextFrame)):
+            messages = self._context.get_messages()
+            max_messages = self._max_turns * 2 + 1  # system + N user/assistant pairs
+
+            if len(messages) > max_messages:
+                # Keep system message + last N turns
+                system_msg = None
+                if messages and messages[0].get('role') == 'system':
+                    system_msg = messages[0]
+
+                recent = messages[-(self._max_turns * 2):]
+
+                if system_msg:
+                    trimmed = [system_msg] + recent
+                else:
+                    trimmed = recent
+
+                self._context.set_messages(trimmed)
+                logger.info(f"ContextLimit: Trimmed from {len(messages)} to {len(trimmed)} messages")
+
+        await self.push_frame(frame, direction)
+
+
 # We store functions so objects (e.g. SileroVADAnalyzer) don't get
 # instantiated. The function will be called when the desired transport gets
 # selected.
@@ -208,7 +298,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
         tts = ElevenLabsHttpTTSService(
             api_key=os.getenv("ELEVENLABS_API_KEY", ""),
-            voice_id="JBFqnCBsd6RMkjVDRZzb",
+            voice_id="JBFqnCBsd6RMkjVDRZzb",  # Original voice (reverting from Jessica due to latency)
             model="eleven_multilingual_v2",  # Support Chinese TTS
             aiohttp_session=session,
         )
@@ -254,14 +344,22 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         stt_converter = SimplifiedToTraditionalProcessor()  # For STT output
         llm_converter = SimplifiedToTraditionalProcessor()  # For LLM output
 
+        # Early feedback for web search queries (reduces user interruption)
+        early_feedback = EarlyFeedbackProcessor()
+
+        # Limit context to prevent hallucination from long conversation history
+        context_limiter = ContextLimitProcessor(context, max_turns=4)
+
         pipeline = Pipeline(
             [
                 transport.input(),  # Transport user input
                 rtvi,  # RTVI protocol processor
                 stt,  # STT
                 stt_converter,  # Convert user transcriptions to Traditional
+                early_feedback,  # Acknowledge web search queries immediately
                 transcript.user(),  # Capture user transcripts
                 context_aggregator.user(),  # User responses
+                context_limiter,  # Trim context to last 4 turns
                 llm,  # LLM
                 llm_converter,  # Convert LLM output to Traditional
                 transcript.assistant(),  # Capture assistant transcripts BEFORE TTS
@@ -282,6 +380,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             observers=[RTVIObserver(rtvi)],
             idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
         )
+
+        # Set task reference for early feedback to queue TTS directly
+        early_feedback.set_task(task)
 
         @transcript.event_handler("on_transcript_update")
         async def handle_transcript_update(processor, frame):
