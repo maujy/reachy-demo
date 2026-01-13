@@ -48,8 +48,8 @@ from pipecat.frames.frames import OutputImageRawFrame, Frame
 load_dotenv(override=True)
 
 
-class PlaceholderVideoSource(FrameProcessor):
-    """Generates placeholder video frames for bot avatar."""
+class BotVideoSource(FrameProcessor):
+    """Streams video from Reachy robot camera, falls back to placeholder."""
 
     def __init__(self, width: int = 640, height: int = 480, fps: int = 15):
         super().__init__()
@@ -60,13 +60,12 @@ class PlaceholderVideoSource(FrameProcessor):
         self._task = None
         self._frame_count = 0
 
-    def _create_frame(self) -> bytes:
-        """Create a placeholder image frame."""
-        # Create gradient background
+    def _create_placeholder_frame(self) -> bytes:
+        """Create a placeholder image when robot camera unavailable."""
         img = Image.new('RGB', (self._width, self._height), color=(30, 30, 50))
         draw = ImageDraw.Draw(img)
 
-        # Draw a simple animated circle (breathing effect)
+        # Animated circle (breathing effect)
         pulse = abs(np.sin(self._frame_count * 0.1)) * 20 + 80
         center_x, center_y = self._width // 2, self._height // 2
         radius = int(pulse)
@@ -76,7 +75,6 @@ class PlaceholderVideoSource(FrameProcessor):
             outline=(150, 200, 255)
         )
 
-        # Draw text
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
         except:
@@ -91,12 +89,33 @@ class PlaceholderVideoSource(FrameProcessor):
         self._frame_count += 1
         return img.tobytes()
 
+    def _get_robot_frame(self) -> bytes | None:
+        """Try to get frame from Reachy robot camera."""
+        try:
+            reachy = ReachyService.get_instance()
+            if reachy.connected and reachy.robot:
+                frame = reachy.robot.media.get_frame()
+                if frame is not None:
+                    # Convert to PIL, resize, and return RGB bytes
+                    img = Image.fromarray(frame)
+                    img = img.resize((self._width, self._height))
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    return img.tobytes()
+        except Exception as e:
+            logger.debug(f"Robot camera unavailable: {e}")
+        return None
+
     async def _generate_frames(self):
         """Background task to generate video frames."""
         interval = 1.0 / self._fps
         while self._running:
             try:
-                frame_data = self._create_frame()
+                # Try robot camera first, fall back to placeholder
+                frame_data = self._get_robot_frame()
+                if frame_data is None:
+                    frame_data = self._create_placeholder_frame()
+
                 frame = OutputImageRawFrame(
                     image=frame_data,
                     size=(self._width, self._height),
@@ -105,7 +124,7 @@ class PlaceholderVideoSource(FrameProcessor):
                 await self.push_frame(frame, FrameDirection.DOWNSTREAM)
                 await asyncio.sleep(interval)
             except Exception as e:
-                logger.error(f"PlaceholderVideoSource error: {e}")
+                logger.error(f"BotVideoSource error: {e}")
                 await asyncio.sleep(interval)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -206,7 +225,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         rtvi = RTVIProcessor()
 
         # Create video source for bot avatar
-        video_source = PlaceholderVideoSource(width=640, height=480, fps=10)
+        video_source = BotVideoSource(width=640, height=480, fps=10)
 
         pipeline = Pipeline(
             [
