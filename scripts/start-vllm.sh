@@ -73,13 +73,16 @@ if pgrep -f "llama-server.*8081" > /dev/null 2>&1; then
     echo "  llama-server already running on port 8081"
 else
     echo "  Starting llama-server..."
+    # --reasoning-format none: Required for REACT agent compatibility
+    # Without this, stop sequences trigger on reasoning_content, breaking agents
     nohup "$LLAMA_CPP_DIR/build/bin/llama-server" \
         -m "$MODEL_PATH" \
         --host 0.0.0.0 \
         --port 8081 \
         -ngl 99 \
-        --ctx-size 4096 \
+        --ctx-size 8192 \
         --alias nemotron \
+        --reasoning-format none \
         > "$HOME/.llama-server.log" 2>&1 &
     echo "  Started with PID: $!"
     echo "  Log: ~/.llama-server.log"
