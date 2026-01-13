@@ -1,8 +1,8 @@
 # Reachy Mini Robot with NeMo Agent Toolkit Tutorial
 
 This tutorial showcases a real-time AI agent built with the **NVIDIA NeMo Agent Toolkit**, powered by **NVIDIA Nemotron models**, controlling a **Reachy Mini Robot**. The agent uses an intelligent LLM router to dynamically route between:
-- **Nemotron nano text** for text-based interactions
-- **Nemotron nano VLM** (Vision Language Model) for visual understanding
+- **Nemotron VLM** (Vision Language Model) for routing and visual understanding
+- **Nemotron 30B NVFP4** for chitchat and complex reasoning
 - **REACT agent** for tool-based actions
 
 ![Reachy Mini Robot Demo](ces_tutorial.png)
@@ -24,18 +24,30 @@ The system consists of three main components running in parallel:
 - ElevenLabs API Key (for text-to-speech)
 - Local NIM containers (see below) OR NVIDIA API Key for cloud inference
 
-### Local vLLM Setup (DGX Spark / GB10)
+### Local Model Setup (DGX Spark / GB10)
 
-The default configuration expects local vLLM containers on:
-- **Port 8000**: Vision model (`nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD`)
-- **Port 8081**: Routing/Agent/Chitchat model (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8`)
+The default configuration runs models locally:
+- **Port 8000**: Vision + Routing model via vLLM (`nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD`)
+- **Port 8081**: Agent/Chitchat model via llama.cpp (`Nemotron-3-Nano-30B-A3B` GGUF)
 
-Start vLLM containers with the provided script:
+> **Note**: We use NVFP4 quantization for GB10 compatibility. FP8 models don't work on sm_121 architecture. The MoE model (Nemotron-3-Nano-30B) runs via llama.cpp because vLLM's FlashInfer MoE kernels fail to compile on GB10.
+
+**Prerequisites:**
+1. Build llama.cpp with CUDA:
+   ```bash
+   cd ~/llama.cpp
+   mkdir -p build && cd build
+   cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="121"
+   cmake --build . -j$(nproc)
+   ```
+2. Download Nemotron-3-Nano GGUF model to `~/models/nemotron3-gguf/`
+
+**Start model servers:**
 ```bash
 ./scripts/start-vllm.sh
 ```
 
-Stop containers:
+**Stop model servers:**
 ```bash
 ./scripts/stop-vllm.sh
 ```
@@ -82,67 +94,63 @@ uv sync
 
 ## Running the System
 
-You'll need **three terminal windows** running simultaneously, plus vLLM containers.
-
-### First: Start vLLM Containers
+### Quick Start (Recommended)
 
 ```bash
+# 1. Start model servers (wait 2-5 minutes for models to load)
 ./scripts/start-vllm.sh
+
+# 2. Run all services in tmux
+./scripts/run-demo.sh
 ```
 
-Wait for both models to load (2-5 minutes). The script will show "Ready!" when done.
+This opens a tmux session with all 3 services running in separate panes.
 
-### Terminal 1: Start Reachy Mini Daemon
+**Tmux controls:**
+- `Ctrl+B, arrow keys` - Switch between panes
+- `Ctrl+B, d` - Detach (services keep running)
+- `Ctrl+B, z` - Zoom current pane
+- `Ctrl+C` - Stop service in current pane
 
-Navigate to the `bot` directory and start the robot daemon:
+**Other commands:**
+```bash
+./scripts/status.sh        # Check status of all components
+./scripts/stop-all.sh      # Stop all services
+./scripts/stop-all.sh --models  # Stop services AND model servers
+```
 
-**For macOS:**
+### Manual Setup (Alternative)
+
+If you prefer running in separate terminals:
+
+**Terminal 1: Reachy Mini Daemon**
 ```bash
 cd bot
-uv run mjpython -m reachy_mini.daemon.app.main --sim --no-localhost-only
+uv run python -m reachy_mini.daemon.app.main --sim --no-localhost-only
+# macOS: use mjpython instead of python
 ```
 
-**For Linux:**
-```bash
-cd bot
-uv run -m reachy_mini.daemon.app.main --sim --no-localhost-only
-```
-
-*Note: The `--sim` flag runs the robot in simulation mode. Remove it if using actual hardware.*
-
-### Terminal 2: Start Bot Service
-
-In the `bot` directory:
-
+**Terminal 2: Bot Service**
 ```bash
 cd bot
 uv run --env-file ../.env python main.py
 ```
 
-This service handles:
-- Vision processing through the robot's camera
-- Speech recognition and text-to-speech
-- Robot movement coordination
-- Emotional expression through dance moves
-
-### Terminal 3: Start NeMo Agent Service
-
-In the `nat` directory:
-
+**Terminal 3: NeMo Agent Service**
 ```bash
 cd nat
 uv run --env-file ../.env nat serve --config_file src/ces_tutorial/config.yml --port 8001
 ```
 
-This launches the NeMo Agent Toolkit server with intelligent model routing capabilities.
+*Note: The `--sim` flag runs the robot in simulation mode. Remove it for real hardware.*
 
 ## How It Works
 
 1. **Vision & Audio Input**: The bot captures visual information and listens for speech
-2. **Agent Processing**: The NeMo Agent router intelligently selects the appropriate model:
-   - Text queries → Nemotron nano text model
-   - Visual queries → Nemotron nano VLM
-   - Action requests → REACT agent with tool calling
+2. **Agent Processing**: The NeMo Agent router (VLM) intelligently classifies user intent:
+   - `chit_chat` → Nemotron 30B NVFP4 for casual conversation
+   - `image_understanding` → Nemotron VLM for visual queries
+   - `other` → REACT agent with tool calling for complex tasks
 3. **Robot Actions**: Based on the agent's response, the bot executes movements, expressions, or speaks
 
 ## Demo
@@ -163,7 +171,10 @@ reachy-demo/
 │       └── functions/     # Router and agent implementations
 ├── scripts/               # Utility scripts
 │   ├── start-vllm.sh     # Start vLLM containers
-│   └── stop-vllm.sh      # Stop vLLM containers
+│   ├── stop-vllm.sh      # Stop vLLM containers
+│   ├── run-demo.sh       # Run all services in tmux
+│   ├── status.sh         # Check status of all components
+│   └── stop-all.sh       # Stop all services
 ├── CLAUDE.md              # Claude Code guidance
 └── .env                   # API keys (create this file)
 ```
@@ -173,8 +184,8 @@ reachy-demo/
 - **Port conflicts**: Ensure ports 8000, 8001, 8081 are available
 - **API key errors**: Verify your `.env` file is properly formatted and contains valid keys
 - **Robot connection issues**: Check that the Reachy daemon started successfully before launching the bot service
-- **vLLM connection errors**: Run `./scripts/start-vllm.sh` and wait for models to load. Check logs with `docker logs vllm-reachy` or `docker logs vllm-agent`
-- **Model loading fails**: On GB10, the agent model requires `--enforce-eager` flag (included in script) to avoid CUDA graph compilation issues
+- **vLLM connection errors**: Run `./scripts/start-vllm.sh` and wait for models to load. Check vLLM logs with `docker logs vllm-reachy`
+- **llama-server issues**: Check logs at `~/.llama-server.log`. Ensure llama.cpp is built with CUDA for sm_121
 
 ## Resources
 

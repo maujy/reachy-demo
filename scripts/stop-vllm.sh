@@ -1,20 +1,26 @@
 #!/bin/bash
-# Stop vLLM containers for Reachy Demo
+# Stop model servers for Reachy Demo
 
-echo "Stopping vLLM containers..."
+echo "=== Stopping Model Servers ==="
+echo ""
 
+# Stop vLLM container
+echo ">>> Stopping vLLM..."
 if docker ps --format '{{.Names}}' | grep -q '^vllm-reachy$'; then
-    echo "Stopping vllm-reachy..."
     docker stop vllm-reachy
+    echo "  vllm-reachy stopped"
 else
-    echo "vllm-reachy is not running"
+    echo "  vllm-reachy not running"
 fi
 
-if docker ps --format '{{.Names}}' | grep -q '^vllm-agent$'; then
-    echo "Stopping vllm-agent..."
-    docker stop vllm-agent
+# Stop llama-server
+echo ""
+echo ">>> Stopping llama-server..."
+if pgrep -f "llama-server" > /dev/null 2>&1; then
+    pkill -f "llama-server"
+    echo "  llama-server stopped"
 else
-    echo "vllm-agent is not running"
+    echo "  llama-server not running"
 fi
 
 echo ""

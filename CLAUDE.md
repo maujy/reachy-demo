@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A real-time AI agent system controlling a Reachy Mini Robot using NVIDIA NeMo Agent Toolkit (NAT). The system uses intelligent LLM routing between Nemotron nano text, Vision Language Model, and REACT agent to dynamically select the best processing path for user queries.
+A real-time AI agent system controlling a Reachy Mini Robot using NVIDIA NeMo Agent Toolkit (NAT). The system uses intelligent LLM routing to dynamically select the best processing path for user queries.
+
+**GB10-optimized architecture** (2 models):
+- **Nemotron VLM** (12B NVFP4 via vLLM) - Handles routing + vision understanding
+- **Nemotron 30B** (GGUF Q8 via llama.cpp) - Handles chitchat + REACT agent
+
+> FP8 models don't work on GB10 (sm_121). vLLM's MoE kernels fail to compile on GB10, so we use llama.cpp for the Nemotron-3-Nano-30B model.
 
 ## Architecture
 
@@ -22,12 +28,14 @@ Three independent services running in parallel:
 │    Bot Service      │◄────────│   NAT Agent Service  │
 │  bot/main.py        │  HTTP   │  nat/config.yml      │
 │                     │ :8001   │                      │
-│ - Pipecat pipeline  │         │ - Router classifier  │
+│ - Pipecat pipeline  │         │ - VLM (router+vision)│
 │ - Audio I/O (STT)   │         │ - Chitchat LLM       │
-│ - Vision I/O        │         │ - Image LLM (VLM)    │
-│ - TTS (ElevenLabs)  │         │ - REACT Agent        │
-│ - Robot movements   │         │                      │
-└─────────────────────┘         └──────────────────────┘
+│ - Vision I/O        │         │ - REACT Agent        │
+│ - TTS (ElevenLabs)  │         │                      │
+│ - Robot movements   │         │  Model servers:      │
+└─────────────────────┘         │  :8000 vLLM (VLM)    │
+                                │  :8081 llama.cpp     │
+                                └──────────────────────┘
 ```
 
 **Data Flow**: User speech/camera → Bot (STT) → NAT Router (classifies intent: chit_chat/image_understanding/other) → Appropriate LLM → Response → Bot (TTS + robot movements)
@@ -40,15 +48,15 @@ cd bot && uv venv && uv sync
 cd ../nat && uv venv && uv sync
 ```
 
-### Start vLLM Containers (DGX Spark / GB10)
+### Start Model Servers (DGX Spark / GB10)
 ```bash
-./scripts/start-vllm.sh   # Start containers, wait for models to load
-./scripts/stop-vllm.sh    # Stop containers
+./scripts/start-vllm.sh   # Start vLLM + llama-server, wait for models to load
+./scripts/stop-vllm.sh    # Stop all model servers
 ```
 
 Models served:
-- Port 8000: `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD` (vision)
-- Port 8081: `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (routing/agent/chitchat)
+- Port 8000: `nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD` via vLLM (routing + vision)
+- Port 8081: `Nemotron-3-Nano-30B-A3B` GGUF via llama.cpp (agent + chitchat)
 
 ### Running (three terminals)
 ```bash

@@ -26,27 +26,29 @@ functions:
       tool_names: [wikipedia_search]
 
 llms:
-   # Routing: Nemotron 3 Nano 30B on GPU (port 8081) - for intent classification
+   # Routing: VLM on GPU (port 8000) - reusing VLM for intent classification
+   # Note: VLM follows instructions well for routing; Phi-3-mini doesn't work on GB10
    routing_llm:
       _type: nim
-      base_url: http://localhost:8081/v1
-      model_name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+      base_url: http://localhost:8000/v1
+      model_name: nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD
       temperature: 0.0
       api_key: "not-needed"
 
-   # Agent: Nemotron 3 Nano 30B on GPU (port 8081) - for complex reasoning/tools
+   # Agent: Nemotron 3 Nano 30B via llama.cpp (port 8081) - for complex reasoning/tools
+   # Note: Using llama.cpp with GGUF for GB10 compatibility (vLLM MoE kernels don't compile)
    agent_llm:
       _type: nim
       base_url: http://localhost:8081/v1
-      model_name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+      model_name: nemotron
       temperature: 0.0
       api_key: "not-needed"
 
-   # Chitchat: Nemotron 3 Nano 30B on GPU (port 8081) - for casual conversation
+   # Chitchat: Nemotron 3 Nano 30B via llama.cpp (port 8081) - for casual conversation
    chitchat_llm:
       _type: nim
       base_url: http://localhost:8081/v1
-      model_name: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+      model_name: nemotron
       temperature: 0.0
       api_key: "not-needed"
 
