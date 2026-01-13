@@ -273,6 +273,11 @@ async def bot(runner_args: RunnerArguments):
 
 
 if __name__ == "__main__":
+    import sys
     from pipecat.runner.run import main
+
+    # Default to binding to all interfaces for network access
+    if "--host" not in sys.argv:
+        sys.argv.extend(["--host", "0.0.0.0"])
 
     main()
