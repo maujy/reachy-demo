@@ -80,7 +80,7 @@ else
         --host 0.0.0.0 \
         --port 8081 \
         -ngl 99 \
-        --ctx-size 8192 \
+        --ctx-size 131072 \
         --alias nemotron \
         --reasoning-format none \
         > "$HOME/.llama-server.log" 2>&1 &
